@@ -44,7 +44,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <boost/format.hpp>
 
-#include "utils.h"
+#include "utils/utils.h"
 
 // SurfaceNormalDataPointsFilter
 // Constructor
@@ -222,8 +222,10 @@ void SurfaceNormalDataPointsFilter<T>::inPlaceFilter(
 			if(sortEigen)
 				normals->col(i) = eigenVe.col(0);
 			else
-				// clamp normals to [-1,1] to handle approximation errors
-				normals->col(i) = computeNormal<T>(eigenVa, eigenVe).cwiseMax(-1.0).cwiseMin(1.0);
+				normals->col(i) = computeNormal<T>(eigenVa, eigenVe);
+			
+			// clamp normals to [-1,1] to handle approximation errors
+			normals->col(i) = normals->col(i).cwiseMax(-1.0).cwiseMin(1.0);
 		}
 		if(keepDensities)
 		{
