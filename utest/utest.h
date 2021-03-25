@@ -3,7 +3,7 @@
 
 #include "pointmatcher/PointMatcher.h"
 #include "pointmatcher/IO.h"
-#include "../contrib/gtest/gtest.h"
+#include <gtest/gtest.h>
 
 #include <string>
 #include <fstream>
@@ -12,7 +12,8 @@
 #include "boost/filesystem/path.hpp"
 #include "boost/filesystem/operations.hpp"
 
-typedef PointMatcher<float> PM;
+typedef float NumericType;
+typedef PointMatcher<NumericType> PM;
 typedef PM::DataPoints DP;
 
 extern std::string dataPath;
