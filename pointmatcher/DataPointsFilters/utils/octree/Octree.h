@@ -41,7 +41,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "utils.h"
 
 /*!
- * \class octree.h
+ * \class Octree.h
  * \brief Octree class for DataPoints spatial representation
  *
  * \author Mathieu Labussiere (<mathieu dot labu at gmail dot com>)
@@ -85,16 +85,22 @@ public:
 	using Data = typename DP::Index; /**/
 	using DataContainer = std::vector<Data>;
 	
-	using Point = Eigen::Matrix<T,dim,1>;
+	using Point = Eigen::Matrix<T, dim, 1>;
 	
-//private:
-	static constexpr std::size_t nbCells = PointMatcherSupport::pow(2, dim);
+	// Number of cells. Every node in the octree has nbCells children.
+	// Example: in an octree with dimension 3, every node has 2^3=8 children.
+	static constexpr std::size_t nbCells{PointMatcherSupport::pow(2, dim)};
 	
 private:
+	/**
+	 * @brief Bounding box.
+	 * Represents a spherical bounding box.
+	 * 
+	 */
 	struct BoundingBox 
 	{
-			Point center;
-			T 	radius;
+		Point center{Point::Zero()};
+		T radius{0};
 	};
 	
 	Octree_* parent;
@@ -126,26 +132,27 @@ public:
 	
 	virtual ~Octree_();
 	
-	Octree_<T,dim>& operator=(const Octree_<T,dim>& o);//Deep-copy
+	Octree_<T,dim>& operator=(const Octree_<T,dim>& o); // Deep-copy
 	Octree_<T,dim>& operator=(Octree_<T,dim>&& o);
 	
 	bool isLeaf() const;
 	bool isRoot() const;
-	bool isEmpty()const;
+	bool isEmpty() const;
 	
 	inline std::size_t idx(const Point& pt) const;
 	inline std::size_t idx(const DP& pts, const Data d) const;
 	
+	const Octree_* getCells() const;
 	std::size_t getDepth() const;
 	
 	T getRadius() const;
 	Point getCenter() const;
 	
-	DataContainer * getData();
+	DataContainer* getData();
 	Octree_<T, dim>* operator[](std::size_t idx);
 	
 	// Build tree from DataPoints with a specified stop parameter
-	bool build(const DP& pts, size_t maxDataByNode=1, T maxSizeByNode=T(0.), bool parallelBuild=false);
+	bool build(const DP& pts, size_t maxDataByNode=1, T maxSizeByNode=T(0.), bool parallelBuild=false, bool centerAtOrigin=true);
 
 protected:
 	//real build function
@@ -158,7 +165,7 @@ public:
 	bool visit(Callback& cb);
 };
 	
-#include "octree.hpp"
+#include "Octree.tpp"
 
 template<typename T> using Quadtree = Octree_<T,2>;
 template<typename T> using Octree = Octree_<T,3>;

@@ -26,6 +26,7 @@ set(POINTMATCHER_SRC
 	pointmatcher/LoggerImpl.cpp
 	pointmatcher/MatchersImpl.cpp
 	pointmatcher/OutlierFiltersImpl.cpp
+	pointmatcher/SurfaceNormalEstimatorPCA.cpp
 	pointmatcher/TransformationsImpl.cpp
 	pointmatcher/TransformationCheckersImpl.cpp
 	pointmatcher/InspectorsImpl.cpp
@@ -38,6 +39,7 @@ set(POINTMATCHER_SRC
 	pointmatcher/ErrorMinimizers/Identity.cpp
 #DataPointsFilters	
 	pointmatcher/DataPointsFilters/Identity.cpp
+	pointmatcher/DataPointsFilters/HiddenPointRemoval.cpp
 	pointmatcher/DataPointsFilters/RemoveNaN.cpp
 	pointmatcher/DataPointsFilters/MaxDist.cpp
 	pointmatcher/DataPointsFilters/MinDist.cpp
@@ -63,6 +65,7 @@ set(POINTMATCHER_SRC
 	pointmatcher/DataPointsFilters/CovarianceSampling.cpp
 	pointmatcher/DataPointsFilters/DistanceLimit.cpp
 	pointmatcher/DataPointsFilters/RemoveSensorBias.cpp
+	pointmatcher/DataPointsFilters/OrganizedCloudSurfaceNormal.cpp
 )
 
 file(GLOB_RECURSE POINTMATCHER_HEADERS "pointmatcher/*.h")

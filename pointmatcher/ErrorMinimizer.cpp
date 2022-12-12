@@ -169,27 +169,27 @@ PointMatcher<T>::ErrorMinimizer::ErrorElements::ErrorElements(const DataPoints& 
 
 	// Copy final data to structure
 	this->reading = DataPoints(
-		keptFeat, 
+		std::move(keptFeat), 
 		requestedPts.featureLabels,
-		keptDesc,
+		std::move(keptDesc),
 		requestedPts.descriptorLabels,
-		keptTime,
+		std::move(keptTime),
 		requestedPts.timeLabels
 	);
 
 	this->reference = DataPoints(
-		associatedFeat,
+		std::move(associatedFeat),
 		sourcePts.featureLabels,
-		associatedDesc,
+		std::move(associatedDesc),
 		sourcePts.descriptorLabels,
-		associatedTime,
+		std::move(associatedTime),
 		sourcePts.timeLabels
 	);
 
-	this->weights = keptWeights;
-	this->matches = keptMatches;
-	this->nbRejectedMatches = rejectedMatchCount;
-	this->nbRejectedPoints = rejectedPointCount;
+	this->weights = std::move(keptWeights);
+	this->matches = std::move(keptMatches);
+	this->nbRejectedMatches = std::move(rejectedMatchCount);
+	this->nbRejectedPoints = std::move(rejectedPointCount);
 }
 
 
@@ -225,7 +225,7 @@ typename PointMatcher<T>::TransformationParameters PointMatcher<T>::ErrorMinimiz
 	TransformationParameters transform = this->compute(matchedPoints);
 	
 	// saves paired points for future introspection
-	this->lastErrorElements = matchedPoints;
+	this->lastErrorElements = std::move(matchedPoints);
 	
 	// returns transforme parameters
 	return transform;
@@ -271,7 +271,7 @@ typename PointMatcher<T>::Matrix PointMatcher<T>::ErrorMinimizer::getCovariance(
 
 //! If not redefined by child class, return max value for T
 template<typename T>
-T PointMatcher<T>::ErrorMinimizer::getResidualError(const DataPoints& filteredReading, const DataPoints& filteredReference, const OutlierWeights& outlierWeights, const Matches& matches) const
+T PointMatcher<T>::ErrorMinimizer::getResidualError(const DataPoints& /*filteredReading*/, const DataPoints& /*filteredReference*/, const OutlierWeights& /*outlierWeights*/, const Matches& /*matches*/) const
 {
 	LOG_WARNING_STREAM("ErrorMinimizer - warning, no specific method to compute residual was provided for the ErrorMinimizer used.");
 	return std::numeric_limits<T>::max();

@@ -35,7 +35,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #pragma once
 
 #include "PointMatcher.h"
-#include "utils/octree.h"
 
 #include <unordered_map>
 
@@ -80,77 +79,16 @@ struct OctreeGridDataPointsFilter : public PointMatcher<T>::DataPointsFilter
 			{"buildParallel", "If 1 (true), use threads to build the octree.", "1", "0", "1", P::Comp<bool>},
 			{"maxPointByNode", "Number of point under which the octree stop dividing.", "1", "1", "4294967295", &P::Comp<std::size_t>},
 			{"maxSizeByNode", "Size of the bounding box under which the octree stop dividing.", "0", "0", "+inf", &P::Comp<T>},
-			{"samplingMethod", "Method to sample the Octree: First Point (0), Random (1), Centroid (2) (more accurate but costly), Medoid (3) (more accurate but costly)", "0", "0", "3", &P::Comp<int>}
+			{"samplingMethod", "Method to sample the Octree: First Point (0), Random (1), Centroid (2) (more accurate but costly), Medoid (3) (more accurate but costly)", "0", "0", "3", &P::Comp<int>},
+			{"centerAtOrigin", "If 1 (true), centers the octree grid at the origin. If 0 (false) computes the origin based on the input data.", "1", "0", "1", P::Comp<bool>}
 		//FIXME: add seed parameter for the random sampling
 		};
 	}
 
 public:
-//Visitors class to apply processing
-	struct FirstPtsSampler
-	{
-		std::size_t idx;
-		DataPoints&	pts;
 
-		//Build map of (old index to new index), 
-		// in case we sample pts at the begining of the pointcloud
-		std::unordered_map<std::size_t, std::size_t> mapidx;
-
-		FirstPtsSampler(DataPoints& dp);
-		virtual ~FirstPtsSampler(){}
-		
-		template<std::size_t dim>
-		bool operator()(Octree_<T,dim>& oc);
-		
-		virtual bool finalize();
-	};
-	struct RandomPtsSampler : public FirstPtsSampler
-	{
-		using FirstPtsSampler::idx;
-		using FirstPtsSampler::pts;
-		using FirstPtsSampler::mapidx;
-		
-		const std::size_t seed;
-	
-		RandomPtsSampler(DataPoints& dp);
-		RandomPtsSampler(DataPoints& dp, const std::size_t seed_);
-		virtual ~RandomPtsSampler(){}
-	
-		template<std::size_t dim>
-		bool operator()(Octree_<T,dim>& oc);
-		
-		virtual bool finalize();
-	};
-	struct CentroidSampler : public FirstPtsSampler
-	{
-		using FirstPtsSampler::idx;
-		using FirstPtsSampler::pts;
-		using FirstPtsSampler::mapidx;
-		
-		CentroidSampler(DataPoints& dp);
-	
-		virtual ~CentroidSampler(){}
-	
-		template<std::size_t dim>
-		bool operator()(Octree_<T,dim>& oc);
-	};
-	//Nearest point from the centroid (contained in the cloud)
-	struct MedoidSampler : public FirstPtsSampler
-	{
-		using FirstPtsSampler::idx;
-		using FirstPtsSampler::pts;
-		using FirstPtsSampler::mapidx;
-		
-		MedoidSampler(DataPoints& dp);
-	
-		virtual ~MedoidSampler(){}
-	
-		template<std::size_t dim>
-		bool operator()(Octree_<T,dim>& oc);		
-	};
-
-//-------	
-	enum SamplingMethod : int { FIRST_PTS=0, RAND_PTS=1, CENTROID=2, MEDOID=3 };
+//Sampling method enumerate
+	enum class SamplingMethod : int { FIRST_PTS=0, RAND_PTS=1, CENTROID=2, MEDOID=3 };
 
 //Atributes
 	bool buildParallel;
@@ -160,17 +98,22 @@ public:
 	
 	SamplingMethod samplingMethod;
 
+	bool centerAtOrigin;
+
 //Methods	
 	//Constructor, uses parameter interface
 	OctreeGridDataPointsFilter(const Parameters& params = Parameters());
 
-	OctreeGridDataPointsFilter();
-	// Destr
-	virtual ~OctreeGridDataPointsFilter() {};
+	// Destructor.
+	virtual ~OctreeGridDataPointsFilter() = default;
 
 	virtual DataPoints filter(const DataPoints& input);
 	virtual void inPlaceFilter(DataPoints& cloud);
 
 private:
-	template<std::size_t dim> void sample(DataPoints& cloud);
+	static constexpr std::size_t featDimension2d{3};
+	static constexpr std::size_t featDimension3d{4};
+
+	template<std::size_t dim>
+	void sample(DataPoints& cloud);
 };

@@ -32,43 +32,60 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 */
-#pragma once
 
-#include "PointMatcher.h"
+#include <cstddef>
 
-#include <string>
+template < typename T, std::size_t dim >
+class Octree_;
 
-//! Random sampling
+/**
+ * @brief Octree offset lookup table.
+ * 
+ * @tparam T 	Octree type.
+ * @tparam dim 	Dimension of the points stored by the octree (e.g. 2, 3)
+ */
+template<typename T, std::size_t dim>
+struct OctreeLookupTable;
+
+/**
+ * @brief Octree offset lookup table in 2 dimensions
+ * 
+ * @tparam T Octree type.
+ */
 template<typename T>
-struct RandomSamplingDataPointsFilter: public PointMatcher<T>::DataPointsFilter
+struct OctreeLookupTable<T,3>
 {
-	typedef PointMatcherSupport::Parametrizable Parametrizable;
-	typedef PointMatcherSupport::Parametrizable P;
-	typedef Parametrizable::Parameters Parameters;
-	typedef Parametrizable::ParameterDoc ParameterDoc;
-	typedef Parametrizable::ParametersDoc ParametersDoc;
-	typedef Parametrizable::InvalidParameter InvalidParameter;
-	
-	typedef typename PointMatcher<T>::DataPoints DataPoints;
-	
-	inline static const std::string description()
-	{
-		return "Subsampling. This filter reduces the size of the point cloud by randomly dropping points. Based on \\cite{Masuda1996Random}";
-	}
-	inline static const ParametersDoc availableParameters()
-	{
-		return {
-			{"prob", "Probability to keep a point, one over decimation factor ", "0.75", "0", "1", &P::Comp<T>},
-			{"randomSamplingMethod", "Random sampling method: Direct RNG (0) (fastest), Uniform (1) (more accurate but slower)", "0", "0", "1", &P::Comp<int>}
-		};
-	}
-	
-	const double prob;
-	const int randomSamplingMethod;
-	
-	RandomSamplingDataPointsFilter(const Parameters& params = Parameters());
-	virtual ~RandomSamplingDataPointsFilter() {};
-	virtual DataPoints filter(const DataPoints& input);
-	virtual void inPlaceFilter(DataPoints& cloud);
-	Eigen::VectorXf sampleRandomIndices(const size_t nbPoints);
+	static const typename Octree_<T,3>::Point offsetTable[Octree_<T,3>::nbCells];
 };
+template<typename T>
+const typename Octree_<T,3>::Point OctreeLookupTable<T,3>::offsetTable[Octree_<T,3>::nbCells] = 
+		{
+			{-0.5, -0.5, -0.5},
+			{+0.5, -0.5, -0.5},
+			{-0.5, +0.5, -0.5},
+			{+0.5, +0.5, -0.5},
+			{-0.5, -0.5, +0.5},
+			{+0.5, -0.5, +0.5},
+			{-0.5, +0.5, +0.5},
+			{+0.5, +0.5, +0.5}
+		};
+
+/**
+ * @brief Octree offset lookup table in 3 dimensions
+ * 
+ * @tparam T Octree type.
+ */
+template<typename T>
+struct OctreeLookupTable<T,2>
+{
+	static const typename Octree_<T,2>::Point offsetTable[Octree_<T,2>::nbCells];
+};
+template<typename T>
+const typename Octree_<T,2>::Point OctreeLookupTable<T,2>::offsetTable[Octree_<T,2>::nbCells] = 
+		{
+			{-0.5, -0.5},
+			{+0.5, -0.5},
+			{-0.5, +0.5},
+			{+0.5, +0.5}
+		};
+

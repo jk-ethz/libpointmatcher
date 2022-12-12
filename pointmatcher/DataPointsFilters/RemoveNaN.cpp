@@ -49,14 +49,24 @@ template<typename T>
 void RemoveNaNDataPointsFilter<T>::inPlaceFilter(
 	DataPoints& cloud)
 {
+	using ArrayBooleans = Eigen::Array<bool, 1, Eigen::Dynamic>;
+
 	const int nbPointsIn = cloud.features.cols();
+
+	// Given that this filter removes the structure from the linear array of points, there is no purpose for keeping the order of the 
+	// point cloud in the index grid anymore.
+	if(cloud.isOrganized()) {
+		cloud.deallocateIndexGrid();
+	}
+
+	// Instantiate array of booleans to flag points as valid.
+    // The following line implements a fast version of isNaN(), suggested by the author of Eigen: https://forum.kde.org/viewtopic.php?f=74&t=91514
+    const ArrayBooleans isValidPoint{ (cloud.features.array() == cloud.features.array()).colwise().all() };
 
 	int j = 0;
 	for (int i = 0; i < nbPointsIn; ++i)
 	{
-		const BOOST_AUTO(colArray, cloud.features.col(i).array());
-		const BOOST_AUTO(hasNaN, !(colArray == colArray).all());
-		if (!hasNaN)
+		if (isValidPoint(i))
 		{
 			cloud.setColFrom(j, cloud, i);
 			++j;

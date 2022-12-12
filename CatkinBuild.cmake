@@ -1,5 +1,5 @@
 # Set compiler flags
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 17)
 add_compile_options(-Wall -Wextra -Wpedantic)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -118,6 +118,7 @@ if(CATKIN_ENABLE_TESTING)
       utest/ui/Matcher.cpp
       utest/ui/Outliers.cpp
       utest/ui/Transformations.cpp
+      utest/ui/octree/Octree.cpp
   )
   add_dependencies(test_pointmatcher
     pointmatcher

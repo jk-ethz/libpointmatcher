@@ -41,9 +41,16 @@ using namespace std;
 
 //! Construct a label from a given name and number of data dimensions it spans
 template<typename T>
-PointMatcher<T>::DataPoints::Label::Label(const std::string& text, const size_t span):
-	text(text),
-	span(span)
+PointMatcher<T>::DataPoints::Label::Label(std::string text, size_t span):
+	text(std::move(text)),
+	span(std::move(span))
+{}
+
+//! Construct a grid index from a given pair of row and column indices
+template<typename T>
+PointMatcher<T>::DataPoints::GridIndex::GridIndex(Index row, Index col):
+	row(std::move(row)),
+	col(std::move(col))
 {}
 
 //! Construct the exception with an error message
@@ -57,6 +64,13 @@ template<typename T>
 bool PointMatcher<T>::DataPoints::Label::operator ==(const Label& that) const
 {
 	return (this->text == that.text) && (this->span == that.span);
+}
+
+//! Return whether two grid indices are equals
+template<typename T>
+bool PointMatcher<T>::DataPoints::GridIndex::operator ==(const GridIndex& that) const
+{
+	return (this->row == that.row) && (this->col == that.col);
 }
 
 //! Construct empty Labels
@@ -111,7 +125,26 @@ PointMatcher<T>::DataPoints::DataPoints(const Labels& featureLabels, const Label
 //! Construct a point cloud from existing descriptions
 template<typename T>
 PointMatcher<T>::DataPoints::DataPoints(const Labels& featureLabels,
-                                        const Labels& descriptorLabels,
+										const Labels& descriptorLabels,
+										const size_t width,
+										const size_t height):
+	featureLabels(featureLabels),
+	descriptorLabels(descriptorLabels)
+{
+	const size_t pointCount{width * height};
+
+	features.resize(featureLabels.totalDim(), pointCount);
+
+	if(descriptorLabels.totalDim())
+		descriptors.resize(descriptorLabels.totalDim(), pointCount);
+
+	allocateIndexGrid(width, height);
+}
+
+//! Construct a point cloud from existing descriptions
+template<typename T>
+PointMatcher<T>::DataPoints::DataPoints(const Labels& featureLabels,
+										const Labels& descriptorLabels,
 										const Labels& timeLabels,
 										const size_t pointCount):
 	featureLabels(featureLabels),
@@ -128,29 +161,39 @@ PointMatcher<T>::DataPoints::DataPoints(const Labels& featureLabels,
 
 //! Construct a point cloud from existing features without any descriptor
 template<typename T>
-PointMatcher<T>::DataPoints::DataPoints(const Matrix& features, const Labels& featureLabels):
-	features(features),
-	featureLabels(featureLabels)
+PointMatcher<T>::DataPoints::DataPoints(Matrix features, Labels featureLabels):
+	features(std::move(features)),
+	featureLabels(std::move(featureLabels))
 {}
 
 //! Construct a point cloud from existing features and descriptors
 template<typename T>
-PointMatcher<T>::DataPoints::DataPoints(const Matrix& features, const Labels& featureLabels, const Matrix& descriptors, const Labels& descriptorLabels):
-	features(features),
-	featureLabels(featureLabels),
-	descriptors(descriptors),
-	descriptorLabels(descriptorLabels)
+PointMatcher<T>::DataPoints::DataPoints(Matrix features, Labels featureLabels, Matrix descriptors, Labels descriptorLabels):
+	features(std::move(features)),
+	featureLabels(std::move(featureLabels)),
+	descriptors(std::move(descriptors)),
+	descriptorLabels(std::move(descriptorLabels))
+{}
+
+//! Construct a point cloud from existing features and descriptors, with a known index grid
+template<typename T>
+PointMatcher<T>::DataPoints::DataPoints(Matrix features, Labels featureLabels, Matrix descriptors, Labels descriptorLabels, IndexMatrix indexGrid):
+	features(std::move(features)),
+	featureLabels(std::move(featureLabels)),
+	descriptors(std::move(descriptors)),
+	descriptorLabels(std::move(descriptorLabels)),
+	indexGrid(std::move(indexGrid))
 {}
 
 //! Construct a point cloud from existing features, descriptors and times
 template<typename T>
-PointMatcher<T>::DataPoints::DataPoints(const Matrix& features, const Labels& featureLabels, const Matrix& descriptors, const Labels& descriptorLabels, const Int64Matrix& times, const Labels& timeLabels):
-	features(features),
-	featureLabels(featureLabels),
-	descriptors(descriptors),
-	descriptorLabels(descriptorLabels),
-	times(times),
-	timeLabels(timeLabels)
+PointMatcher<T>::DataPoints::DataPoints(Matrix features, Labels featureLabels, Matrix descriptors, Labels descriptorLabels, Int64Matrix times, Labels timeLabels):
+	features(std::move(features)),
+	featureLabels(std::move(featureLabels)),
+	descriptors(std::move(descriptors)),
+	descriptorLabels(std::move(descriptorLabels)),
+	times(std::move(times)),
+	timeLabels(std::move(timeLabels))
 {}
 
 //! Return the number of points contained in the point cloud
@@ -164,8 +207,8 @@ unsigned PointMatcher<T>::DataPoints::getNbPoints() const
 template<typename T>
 unsigned PointMatcher<T>::DataPoints::getEuclideanDim() const
 {
-    const size_t nbRows = features.rows();
-    return (nbRows == 0) ? 0 : (nbRows - 1);
+	const size_t nbRows = features.rows();
+	return (nbRows == 0) ? 0 : (nbRows - 1);
 }
 
 //! Return the dimension of the point cloud in homogeneous coordinates (one more than Euclidean dimension)
@@ -196,6 +239,22 @@ unsigned PointMatcher<T>::DataPoints::getTimeDim() const
 	return times.rows();
 }
 
+//! Return the width of the point cloud
+template<typename T>
+unsigned PointMatcher<T>::DataPoints::getWidth() const
+{
+	const Index gridWidth{indexGrid.cols()};
+	return (indexGrid.size() > 0) ? gridWidth : getNbPoints();
+}
+
+//! Return the height of the point cloud. Only organized point clouds have a height != 1
+template<typename T>
+unsigned PointMatcher<T>::DataPoints::getHeight() const
+{
+	const Index gridHeight{indexGrid.rows()};
+	return (indexGrid.size() > 0) ? gridHeight : 1u;
+}
+
 //! Return whether two point-clouds are identical (same data and same labels)
 template<typename T>
 bool PointMatcher<T>::DataPoints::operator ==(const DataPoints& that) const
@@ -207,14 +266,17 @@ bool PointMatcher<T>::DataPoints::operator ==(const DataPoints& that) const
 		(descriptors.rows() == that.descriptors.rows()) &&
 		(descriptors.cols() == that.descriptors.cols())	&&
 		(times.rows() == that.times.rows()) &&
-		(times.cols() == that.times.cols()))
+		(times.cols() == that.times.cols()) &&
+		(indexGrid.rows() == that.indexGrid.rows()) &&
+		(indexGrid.cols() == that.indexGrid.cols()))
 	{
 		isEqual = (features == that.features) &&
 			(featureLabels == that.featureLabels) &&
 			(descriptors == that.descriptors) &&
 			(descriptorLabels == that.descriptorLabels)&&
 			(times == that.times) &&
-			(timeLabels == that.timeLabels);
+			(timeLabels == that.timeLabels) &&
+			(indexGrid == that.indexGrid);
 	}
 
 	return isEqual;
@@ -248,7 +310,9 @@ void PointMatcher<T>::DataPoints::concatenate(const DataPoints& dp)
 	// concatenate time
 	concatenateLabelledMatrix(&timeLabels, &times, dp.timeLabels, dp.times);
 	assertTimesConsistency();
-	
+
+	// deallocate index grid, as we assume that concatenation breaks point cloud ordering
+	deallocateIndexGrid();
 }
 
 
@@ -321,18 +385,37 @@ void PointMatcher<T>::DataPoints::concatenateLabelledMatrix(Labels* labels, Matr
 			*labels = Labels();
 		}
 	}
+
+	// deallocate index grid, as we assume that concatenation breaks point cloud ordering
+	deallocateIndexGrid();
 }
 
 //! Resize the cloud to pointCount points, conserving existing ones
 template<typename T>
 void PointMatcher<T>::DataPoints::conservativeResize(Index pointCount)
 {
+	const Index startingPointCount{features.cols()};
+
 	features.conservativeResize(Eigen::NoChange, pointCount);
 	if (descriptors.cols() > 0)
 		descriptors.conservativeResize(Eigen::NoChange, pointCount);
 
 	if (times.cols() > 0)
 		times.conservativeResize(Eigen::NoChange, pointCount);
+
+	// If the point cloud is not organized, return early.
+	if(!isOrganized()) {
+		return;
+	}
+
+	// update index grid
+	if(pointCount > startingPointCount){
+		// deallocate index grid, as we lack information to know how the index grid should grow
+		deallocateIndexGrid();
+	} else {
+		// keep only the indices of points that are < pointCount
+		indexGrid = (indexGrid.array() < pointCount).select(indexGrid, EmptyGridValue);
+	}
 }
 
 //! Create an empty DataPoints of similar dimensions and labels  for features, descriptors and times
@@ -357,6 +440,11 @@ typename PointMatcher<T>::DataPoints PointMatcher<T>::DataPoints::createSimilarE
 	{
 		output.times = Int64Matrix(times.rows(), nbPoints);
 		output.timeLabels = timeLabels;
+	}
+
+	if(isOrganized()) {
+		assertIndexGridConsistency();
+		output.allocateIndexGrid(getWidth(), getHeight());
 	}
 
 	return output;
@@ -389,6 +477,7 @@ typename PointMatcher<T>::DataPoints PointMatcher<T>::DataPoints::createSimilarE
 }
 
 //! Set column thisCol equal to column thatCol of that, copy features and descriptors if any. Assumes sizes are similar
+//! If this function is called on an organized point cloud, it will make the point cloud order inconsistent.
 template<typename T>
 void PointMatcher<T>::DataPoints::setColFrom(Index thisCol, const DataPoints& that, Index thatCol)
 {
@@ -400,16 +489,26 @@ void PointMatcher<T>::DataPoints::setColFrom(Index thisCol, const DataPoints& th
 	if (times.cols() > 0)
 		times.col(thisCol) = that.times.col(thatCol);
 
+	assert(isOrganized() == false);
 }
-//! Swap column i and j in the point cloud, swap also features and descriptors if any. Assumes sizes are similar
+
+//! Swap column i and j in the point cloud, swap also features and descriptors if any. Assumes sizes are similar.
+//! If this function is called on an organized point cloud, it will make the point cloud order inconsistent.
 template<typename T>
-void PointMatcher<T>::DataPoints::swapCols(Index iCol,Index jCol)
+void PointMatcher<T>::DataPoints::swapCols(Index iCol, Index jCol)
 {
+	// If the column indices point to the same element, return early.
+	if(iCol == jCol) {
+		return;
+	}
+
 	features.col(iCol).swap(features.col(jCol));
 	if (descriptors.cols() > 0)
 		descriptors.col(iCol).swap(descriptors.col(jCol));
 	if (times.cols() > 0)
 		times.col(iCol).swap(times.col(jCol));
+	
+	assert(isOrganized() == false);
 }
 
 //------------------------------------
@@ -716,6 +815,97 @@ template<typename T>
 void PointMatcher<T>::DataPoints::assertTimesConsistency() const
 {
 	assertConsistency("times", times.rows(), times.cols(), timeLabels);
+}
+
+//---------------------------------------
+// Methods related to point organization
+//---------------------------------------
+//! Allocates an index grid with given dimensions
+template<typename T>
+void PointMatcher<T>::DataPoints::allocateIndexGrid(Index width, Index height)
+{
+	indexGrid = IndexMatrix::Constant(height, width, EmptyGridValue);
+}
+
+//! Deallocates an index grid
+template<typename T>
+void PointMatcher<T>::DataPoints::deallocateIndexGrid()
+{
+	indexGrid.resize(0, 0);
+}
+
+//! Computes a linear index from a given grid index
+template<typename T>
+typename PointMatcher<T>::DataPoints::Index PointMatcher<T>::DataPoints::computeLinearIndexFromGridIndex(Index rowIndex, Index colIndex) const
+{
+	// The computation of the linear index assumes that the point cloud is stored in column-major order with respect to the index grid.
+	const Index gridHeight{indexGrid.rows()};
+	assert(colIndex * gridHeight + rowIndex < indexGrid.size());
+	return colIndex * gridHeight + rowIndex;
+}
+
+//! Computes a grid index from a given linear index
+template<typename T>
+typename PointMatcher<T>::DataPoints::GridIndex PointMatcher<T>::DataPoints::computeGridIndexFromLinearIndex(Index linearIndex) const
+{	
+	// rowIndex = linearIndex % numRows
+	// colIndex = linearIndex / numRows
+	const Index gridHeight{indexGrid.rows()};
+	return GridIndex(linearIndex % gridHeight, linearIndex / gridHeight);
+}
+
+//! Returns a reference to a grid index cell pointed by a given linear index
+template<typename T>
+typename PointMatcher<T>::DataPoints::Index& PointMatcher<T>::DataPoints::getIndexGridCell(Index linearIndex)
+{	
+	const Index gridHeight{indexGrid.rows()};
+	return indexGrid(linearIndex % gridHeight, linearIndex / gridHeight);
+}
+
+//! Returns a reference to a grid index cell pointed by given (row, col) indices
+template<typename T>
+typename PointMatcher<T>::DataPoints::Index& PointMatcher<T>::DataPoints::getIndexGridCell(Index rowIndex, Index colIndex)
+{	
+	return indexGrid(rowIndex, colIndex);
+}
+
+//! Returns whether this point cloud is organized
+template<typename T>
+bool PointMatcher<T>::DataPoints::isOrganized() const
+{
+	const Index gridWidth{indexGrid.cols()};
+	const Index gridHeight{indexGrid.rows()};
+	return gridWidth > 0 && gridHeight > 0;
+}
+
+//! Assert if the index grid of this point cloud is consistent with the point cloud size
+template<typename T>
+void PointMatcher<T>::DataPoints::assertIndexGridConsistency() const
+{
+	assert(indexGrid.rows() * indexGrid.cols() == getNbPoints());
+}
+
+/// Return the number of bytes of memory used by this DataPoints structure.
+template<typename T>
+typename PointMatcher<T>::Int64 PointMatcher<T>::DataPoints::computeMemoryUsage() const
+{
+    Int64 totalMemoryUsed{ 0 };
+
+    // Labels.
+    totalMemoryUsed += sizeof(Labels) * 3;
+    totalMemoryUsed += sizeof(std::string) * featureLabels.size();
+    totalMemoryUsed += sizeof(std::string) * descriptorLabels.size();
+    totalMemoryUsed += sizeof(std::string) * timeLabels.size();
+
+    // Data.
+    totalMemoryUsed += sizeof(T) * features.rows() * features.cols();
+    totalMemoryUsed += sizeof(T) * descriptors.rows() * descriptors.cols();
+    totalMemoryUsed += sizeof(Int64) * times.rows() * times.cols();
+
+    // Index grid
+    totalMemoryUsed += sizeof(Index) * indexGrid.rows() * indexGrid.cols();
+
+    return totalMemoryUsed;
 }
 
 //! Assert if a matrix is not consistent with features
@@ -1028,8 +1218,9 @@ void PointMatcher<T>::swapDataPoints(DataPoints& a, DataPoints& b)
 	swap(a.descriptorLabels, b.descriptorLabels);
 	a.times.swap(b.times);
 	swap(a.timeLabels, b.timeLabels);
+	a.indexGrid.swap(b.indexGrid);
 }
-
+ 
 template
 void PointMatcher<float>::swapDataPoints(DataPoints& a, DataPoints& b);
 template

@@ -44,9 +44,10 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //TODO: investigate if that causes more problems down the road
 #define EIGEN_NO_DEBUG
 
-#include "Eigen/StdVector"
-#include "Eigen/Core"
-#include "Eigen/Geometry"
+#include <Eigen/StdVector>
+#include <Eigen/Core>
+#include <Eigen/Geometry>
+#include <Eigen/Eigenvalues>
 
 
 #include <boost/thread/mutex.hpp>
@@ -138,6 +139,12 @@ struct PointMatcher
 	#define ONE_MINUS_EPS (1. - std::numeric_limits<double>::epsilon())
 
 	// ---------------------------------
+	// compile-time constants
+	// ---------------------------------
+	static constexpr T kConversionFactorBytesToMegabytes{1024.0 * 1024.0};
+  	static constexpr T kConversionFactorBytesToGygabytes{1024.0 * 1024.0 * 1024.0};
+
+	// ---------------------------------
 	// exceptions
 	// ---------------------------------
 
@@ -156,6 +163,8 @@ struct PointMatcher
 
 	//! The scalar type
 	typedef T ScalarType;
+	//! A 64-bit integer
+	typedef typename std::int64_t Int64;
 	//! A vector over ScalarType
 	typedef typename Eigen::Matrix<T, Eigen::Dynamic, 1> Vector;
 	//! A vector of vector over ScalarType, not a matrix
@@ -166,10 +175,12 @@ struct PointMatcher
 	typedef std::vector<Quaternion, Eigen::aligned_allocator<Quaternion> > QuaternionVector;
 	//! A dense matrix over ScalarType
 	typedef typename Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> Matrix;
+	//! A dense matrix of Eigen::Matrix::Index
+	typedef typename Eigen::Matrix<Eigen::Index, Eigen::Dynamic, Eigen::Dynamic> IndexMatrix;
 	//! A dense integer matrix
 	typedef typename Eigen::Matrix<int, Eigen::Dynamic, Eigen::Dynamic> IntMatrix;
 	//! A dense signed 64-bits matrix
-	typedef typename Eigen::Matrix<std::int64_t, Eigen::Dynamic, Eigen::Dynamic> Int64Matrix;
+	typedef typename Eigen::Matrix<Int64, Eigen::Dynamic, Eigen::Dynamic> Int64Matrix;
 	//! A dense array over ScalarType
 	typedef typename Eigen::Array<T, Eigen::Dynamic, Eigen::Dynamic> Array;
 
@@ -209,19 +220,26 @@ struct PointMatcher
 		typedef Eigen::Block<Matrix> View;
 		//! A view on a time
 		typedef Eigen::Block<Int64Matrix> TimeView;
+		//! A view on the index grid
+		typedef Eigen::Block<Int64Matrix> IndexGridView;
 		//! A view on a const feature or const descriptor
 		typedef const Eigen::Block<const Matrix> ConstView;
 		//! a view on a const time
 		typedef const Eigen::Block<const Int64Matrix> TimeConstView;
 		//! An index to a row or a column
 		typedef typename Matrix::Index Index;
+		//! a view on the index grid
+		typedef const Eigen::Block<const Index> IndexGridConstView;
+
+		//! Default value of index grid for non-existing points
+		static constexpr Index EmptyGridValue{-1};
 
 		//! The name for a certain number of dim
 		struct Label
 		{
 			std::string text; //!< name of the label
 			size_t span; //!< number of data dimensions the label spans
-			Label(const std::string& text = "", const size_t span = 0);
+			Label(std::string text = "", size_t span = 0);
 			bool operator ==(const Label& that) const;
 		};
 		//! A vector of Label
@@ -245,6 +263,14 @@ struct PointMatcher
 			};
 		};
 
+		//! Index to reflect the point cloud ordering as a 2D grid
+		struct GridIndex {
+			Index row;
+			Index col;
+			GridIndex(Index row, Index col);
+			bool operator ==(const GridIndex& that) const;
+		};
+
 		//! An exception thrown when one tries to access features or descriptors unexisting or of wrong dimensions
 		struct InvalidField: std::runtime_error
 		{
@@ -254,12 +280,14 @@ struct PointMatcher
 		// Constructors from descriptions (reserve memory)
 		DataPoints();
 		DataPoints(const Labels& featureLabels, const Labels& descriptorLabels, const size_t pointCount);
+		DataPoints(const Labels& featureLabels, const Labels& descriptorLabels, const size_t width, const size_t height);
 		DataPoints(const Labels& featureLabels, const Labels& descriptorLabels, const Labels& timeLabels, const size_t pointCount);
 
 		// Copy constructors from partial data
-		DataPoints(const Matrix& features, const Labels& featureLabels);
-		DataPoints(const Matrix& features, const Labels& featureLabels, const Matrix& descriptors, const Labels& descriptorLabels);
-		DataPoints(const Matrix& features, const Labels& featureLabels, const Matrix& descriptors, const Labels& descriptorLabels, const Int64Matrix& times, const Labels& timeLabels);
+		DataPoints(Matrix features, Labels featureLabels);
+		DataPoints(Matrix features, Labels featureLabels, Matrix descriptors, Labels descriptorLabels);
+		DataPoints(Matrix features, Labels featureLabels, Matrix descriptors, Labels descriptorLabels, IndexMatrix indexGrid);
+		DataPoints(Matrix features, Labels featureLabels, Matrix descriptors, Labels descriptorLabels, Int64Matrix times, Labels timeLabels);
 
 		bool operator ==(const DataPoints& that) const;
 
@@ -269,6 +297,8 @@ struct PointMatcher
 		unsigned getNbGroupedDescriptors() const;
 		unsigned getDescriptorDim() const;
 		unsigned getTimeDim() const;
+		unsigned getWidth() const;
+		unsigned getHeight() const;
 
 		void save(const std::string& fileName, bool binary = false) const;
 		static DataPoints load(const std::string& fileName);
@@ -327,12 +357,26 @@ struct PointMatcher
 		unsigned getTimeStartingRow(const std::string& name) const;
 		void assertTimesConsistency() const;
 
+		// methods related to point organization
+		void allocateIndexGrid(Index width, Index height);
+		void deallocateIndexGrid();
+		Index computeLinearIndexFromGridIndex(Index rowIndex, Index colIndex) const;
+		GridIndex computeGridIndexFromLinearIndex(Index linearIndex) const;
+		Index& getIndexGridCell(Index linearIndex);
+		Index& getIndexGridCell(Index rowIndex, Index colIndex);
+		bool isOrganized() const;
+		void assertIndexGridConsistency() const;
+
+		// methods related to storage
+        Int64 computeMemoryUsage() const;
+
 		Matrix features; //!< features of points in the cloud
 		Labels featureLabels; //!< labels of features
 		Matrix descriptors; //!< descriptors of points in the cloud, might be empty
 		Labels descriptorLabels; //!< labels of descriptors
 		Int64Matrix times; //!< time associated to each points, might be empty
 		Labels timeLabels; //!< labels of times.
+		IndexMatrix indexGrid; //!< mapping between a dense index for points and a 2D sensor-specific grid (point cloud ordering)
 
 	private:
 		void assertConsistency(const std::string& dataName, const int dataRows, const int dataCols, const Labels& labels) const;
@@ -377,7 +421,7 @@ struct PointMatcher
 		static constexpr T InvalidDist = std::numeric_limits<T>::infinity(); //! In case of too few matches the dists are filled with InvalidDist
 
 		Matches();
-		Matches(const Dists& dists, const Ids ids);
+		Matches(Dists dists, Ids ids);
 		Matches(const int knn, const int pointsCount);
 
 		Dists dists; //!< squared distances to closest points
@@ -658,6 +702,7 @@ struct PointMatcher
 		DataPointsFilters readingStepDataPointsFilters; //!< filters for reading, applied at each step
 		DataPointsFilters referenceDataPointsFilters; //!< filters for reference
 		Matches matches; //!< data associations
+		OutlierWeights outlierWeights; //!< outlier weights
 		Transformations transformations; //!< transformations
 		std::shared_ptr<Matcher> matcher; //!< matcher
 		OutlierFilters outlierFilters; //!< outlier filters
@@ -678,6 +723,9 @@ struct PointMatcher
 
 		//! Return the latest data association between reading and reference point clouds.
 		const Matches& getMatches() const { return matches; }
+
+		//! Return the latest outlier weights for the reading point cloud.
+		const OutlierWeights& getOutlierWeights() const { return outlierWeights; }
 
 	protected:
 		unsigned prefilteredReadingPtsCount; //!< remaining number of points after prefiltering but before the iterative process
@@ -717,10 +765,22 @@ struct PointMatcher
 		TransformationParameters compute(
 			const DataPoints& readingIn,
 			const DataPoints& referenceIn,
-			const TransformationParameters& initialTransformationParameters);
+			const TransformationParameters& initialTransformationParameters,
+			const bool initializeMatcherWithInputReference = true);
+
+		bool initReference(const DataPoints& referenceIn);
 
 		//! Return the filtered point cloud reading used in the ICP chain
 		const DataPoints& getReadingFiltered() const { return readingFiltered; }
+
+		//! Return the filtered point cloud reference used in the ICP chain
+		const DataPoints& getReferenceFiltered() const { return referenceFiltered; }
+
+		//! Return the transformation from reference to feature centroid.
+		const TransformationParameters& getTransformationReferenceToFeatureCentroid() const { return T_refIn_refMean; }
+
+		//! Return whether the matcher is initialized.
+		bool isMatcherInitialized() const { return matcherIsInitialized; }
 
 	protected:
 		TransformationParameters computeWithTransformedReference(
@@ -730,6 +790,12 @@ struct PointMatcher
 			const TransformationParameters& initialTransformationParameters);
 
 		DataPoints readingFiltered; //!< reading point cloud after the filters were applied
+		DataPoints referenceFiltered;
+
+		// Transformation from input frame to the center of mass of the reference point cloud.
+		TransformationParameters T_refIn_refMean;
+
+		bool matcherIsInitialized{false};
 	};
 
 	//! ICP alogrithm, taking a sequence of clouds and using a map
@@ -767,10 +833,67 @@ struct PointMatcher
 
 	protected:
 		DataPoints mapPointCloud; //!< point cloud of the map, always in global frame (frame of first point cloud)
-		TransformationParameters T_refIn_refMean; //!< offset for centered map
 	};
 
-	// ---------------------------------
+    // Surface normal estimation based on PCA analyses the span of a group of points by computing their eigenvectors and eigenvalues.
+    // The eigenvector associated with the smallest eigenvalue of a group of points corresponds to the direction of least span
+    // of the data, and thus, it is interpreted as The Surface Normal of the points.
+    struct SurfaceNormalEstimatorPCA
+    {
+        //!< Typedefs
+        static constexpr Eigen::Index kPointDimension{ 3 };
+        typedef typename Eigen::Matrix<T, kPointDimension, kPointDimension> FixedSizeMatrix3;
+        typedef Eigen::SelfAdjointEigenSolver<FixedSizeMatrix3> EigenvalueSolver;
+
+        //!< Methods
+
+        //! Extrudes a normal from an ordered collection of eigenvectors of a point cluster.
+        //! Uses the first eigenvector in the collection to compute the normal, following the convention from libeigen::SelfAdjointEigenSolver
+        //! that eigenvectors and eigenvalues are stored in increasing order of eigenvalue magnitude.
+        //! @param eigenValues[in]      Eigenvalues of a point cluster.
+        //! @param eigenVectors[in]     Eigenvectors of a point cluster.
+        //! @return Vector              Normal vector.
+        static Vector extrudeNormalFromIncreasinglyOrderedEigenvectors(const Vector& eigenValues, const Matrix& eigenVectors) noexcept;
+
+        //! Extrudes a normal from an unordered collection of eigenvectors of a point cluster.
+        //! This method orders the eigenvectors according to the magnitude of the corresponding eigenvalues, and returns the eigenvector for the
+        //! smallest eigenvalue as the normal.
+        //! @param eigenValues[in]      Eigenvalues of a point cluster.
+        //! @param eigenVectors[in]     Eigenvectors of a point cluster.
+        //! @return Vector              Normal vector.
+        static Vector extrudeNormalFromUnorderedEigenvectors(const Vector& eigenValues, const Matrix& eigenVectors) noexcept;
+
+        //! Normal estimation based on PCA suffers from ambiguity in the extrusion of normals. A normal for a surface can be oriented in two ways (pointing towards the sensor, or against)
+        //! This method re-orients a normal so it points towards the sensor frame.
+        //! @param sensorPosition[in] 	Sensor position in the point cloud frame.
+        //! @param point[in]			Point to which the normal belongs
+        //! @param normalVector[out]    Normal vector to orient.
+        static void orientNormalVectorTowardsSensorFrame(const Vector& sensorPosition, const Vector& point, Vector& normalVector) noexcept;
+
+        //! This method computes local surface descriptors based on the papers
+        //! - "Contour detection in unstructured 3D point clouds" by Hackel et al (2016),
+        //! - “Fast semantic segmentation of 3d point clouds with strongly varying density” by Hackel et al (2016),
+        //! This function assumes that the eigenvalues are ordered in an increasing-manner.
+        //! @param eigenValues[in]	Eigenvalues of the local surface, will be used to compute descriptors.
+        //! @param linearity[out]    Linearity surface descriptor.
+        //! @param planarity[out]    Planarity surface descriptor.
+        //! @param curvature[out]    Curvature surface descriptor.
+        static void computeLocalSurfaceDescriptors(const Vector& eigenValues, T& linearity, T& planarity, T& curvature) noexcept;
+
+        //! Computes a normal applying PCA to a group of points.
+        //! @param selectedPoints[in]   Selected points, stacked in the columns of a matrix.
+        //! @param normal[out]          Normal vector of the points.
+        //! @param linearity[out]       Linearity surface descriptor.
+        //! @param planarity[out]       Planarity surface descriptor.
+        //! @param curvature[out]       Curvature surface descriptor.
+        //! @return bool                Whether the normal could be computed successfully.
+        bool computeNormalVector(const Matrix& points, Vector& normal, T& linearity, T& planarity, T& curvature) noexcept;
+
+        //!< Attributes
+        Eigen::Index minimumNumberOfPointsToComputeNormal{ 10 };
+    };
+
+    // ---------------------------------
 	// Instance-related functions
 	// ---------------------------------
 

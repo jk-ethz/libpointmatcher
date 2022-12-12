@@ -91,7 +91,7 @@ void PointMatcher<T>::ICPChainBase::cleanup()
 
 //! Hook to load addition subclass-specific content from the YAML file
 template<typename T>
-void PointMatcher<T>::ICPChainBase::loadAdditionalYAMLContent(YAML::Node& doc)
+void PointMatcher<T>::ICPChainBase::loadAdditionalYAMLContent(YAML::Node& /*doc*/)
 {
 }
 
@@ -265,7 +265,8 @@ template<typename T>
 typename PointMatcher<T>::TransformationParameters PointMatcher<T>::ICP::compute(
 	const DataPoints& readingIn,
 	const DataPoints& referenceIn,
-	const TransformationParameters& T_refIn_dataIn)
+	const TransformationParameters& T_refIn_dataIn,
+	const bool initializeMatcherWithInputReference)
 {
 	// Ensuring minimum definition of components
 	if (!this->matcher)
@@ -278,38 +279,59 @@ typename PointMatcher<T>::TransformationParameters PointMatcher<T>::ICP::compute
 	this->inspector->init();
 	
 	timer t; // Print how long take the algo
-	const int dim(referenceIn.features.rows());
 	
-	// Apply reference filters
-	// reference is express in frame <refIn>
-	DataPoints reference(referenceIn);
-	this->referenceDataPointsFilters.init();
-	this->referenceDataPointsFilters.apply(reference);
-	
-	// Create intermediate frame at the center of mass of reference pts cloud
-	//  this help to solve for rotations
-	const int nbPtsReference = reference.features.cols();
-	const Vector meanReference = reference.features.rowwise().sum() / nbPtsReference;
-	TransformationParameters T_refIn_refMean(Matrix::Identity(dim, dim));
-	T_refIn_refMean.block(0,dim-1, dim-1, 1) = meanReference.head(dim-1);
-	
-	// Reajust reference position: 
-	// from here reference is express in frame <refMean>
-	// Shortcut to do T_refIn_refMean.inverse() * reference
-	reference.features.topRows(dim-1).colwise() -= meanReference.head(dim-1);
-	
-	// Init matcher with reference points center on its mean
-	this->matcher->init(reference);
+	// Initialize the matcher and reference holder only if required explicitly.
+	if(initializeMatcherWithInputReference || !this->matcherIsInitialized){
+		initReference(referenceIn);
+	}
 	
 	// statistics on last step
 	this->inspector->addStat("ReferencePreprocessingDuration", t.elapsed());
 	this->inspector->addStat("ReferenceInPointCount", referenceIn.features.cols());
-	this->inspector->addStat("ReferencePointCount", reference.features.cols());
+	this->inspector->addStat("ReferencePointCount", this->referenceFiltered.features.cols());
 	LOG_INFO_STREAM("PointMatcher::icp - reference pre-processing took " << t.elapsed() << " [s]");
-	this->prefilteredReferencePtsCount = reference.features.cols();
+	this->prefilteredReferencePtsCount = this->referenceFiltered.features.cols();
 	
-	return computeWithTransformedReference(readingIn, reference, T_refIn_refMean, T_refIn_dataIn);
+	return computeWithTransformedReference(readingIn, this->referenceFiltered, this->T_refIn_refMean, T_refIn_dataIn);
 	
+}
+template<typename T>
+bool PointMatcher<T>::ICP::initReference(const DataPoints& referenceIn) {
+	const long int nbPtsReference{referenceIn.features.cols()};
+	if(nbPtsReference == 0) {
+		this->matcherIsInitialized = false;
+		return false;
+	}
+	
+	// Reset reference and transformation.
+	const long int dim{referenceIn.features.rows()};
+	this->referenceFiltered = referenceIn;
+
+	// Reset transformation from reference frame to reference centroid.
+	this->T_refIn_refMean = Matrix::Identity(dim, dim);
+
+	// Apply filters to reference.
+	this->referenceDataPointsFilters.init();
+	this->referenceDataPointsFilters.apply(this->referenceFiltered);	
+
+	// Create intermediate frame at the center of mass of reference pts cloud
+	//  this helps to solve for rotations
+	const long int nbPtsReferenceFiltered{this->referenceFiltered.features.cols()};
+	const Vector meanReference{this->referenceFiltered.features.rowwise().sum() / nbPtsReferenceFiltered};
+	this->T_refIn_refMean.block(0,dim-1, dim-1, 1) = meanReference.head(dim-1);
+
+	// Readjust reference position:
+	// 	Reference was originally expressed in the frame <refIn>
+	// 	from here on reference is expressed in frame <refMean>
+	// 	Shortcut to do T_refIn_refMean.inverse() * reference
+	this->referenceFiltered.features.topRows(dim-1).colwise() -= meanReference.head(dim-1);
+
+	// Init matcher with reference points centered. on its mean
+	this->matcher->resetVisitCount();
+	this->matcher->init(this->referenceFiltered);
+	this->matcherIsInitialized = true;
+
+	return true;
 }
 
 //! Perferm ICP using an already-transformed reference and with an already-initialized matcher
@@ -386,20 +408,18 @@ typename PointMatcher<T>::TransformationParameters PointMatcher<T>::ICP::compute
 		
 		//-----------------------------
 		// Detect outliers
-		const OutlierWeights outlierWeights(
-			this->outlierFilters.compute(stepReading, reference, this->matches)
-		);
+		this->outlierWeights = this->outlierFilters.compute(stepReading, reference, this->matches);
 		
-		assert(outlierWeights.rows() == this->matches.ids.rows());
-		assert(outlierWeights.cols() == this->matches.ids.cols());
+		assert(this->outlierWeights.rows() == this->matches.ids.rows());
+		assert(this->outlierWeights.cols() == this->matches.ids.cols());
 		
-		//cout << "outlierWeights: " << outlierWeights << "\n";
+		// cout << "outlierWeights: " << this->outlierWeights << "\n";
 	
 		
 		//-----------------------------
 		// Dump
 		this->inspector->dumpIteration(
-			iterationCount, T_iter, reference, stepReading, this->matches, outlierWeights, this->transformationCheckers
+			iterationCount, T_iter, reference, stepReading, this->matches, this->outlierWeights, this->transformationCheckers
 		);
 		
 		//-----------------------------
@@ -407,7 +427,7 @@ typename PointMatcher<T>::TransformationParameters PointMatcher<T>::ICP::compute
 		// equivalent to: 
 		//   T_iter(i+1)_iter(0) = T_iter(i+1)_iter(i) * T_iter(i)_iter(0)
 		T_iter = this->errorMinimizer->compute(
-			stepReading, reference, outlierWeights, this->matches) * T_iter;
+			stepReading, reference, this->outlierWeights, this->matches) * T_iter;
 		
 		// Old version
 		//T_iter = T_iter * this->errorMinimizer->compute(
@@ -486,8 +506,8 @@ bool PointMatcher<T>::ICPSequence::setMap(const DataPoints& inputCloud)
 	// Create intermediate frame at the center of mass of reference pts cloud
 	//  this help to solve for rotations
 	const Vector meanMap = mapPointCloud.features.rowwise().sum() / ptCount;
-	T_refIn_refMean = Matrix::Identity(dim, dim);
-	T_refIn_refMean.block(0,dim-1, dim-1, 1) = meanMap.head(dim-1);
+	this->T_refIn_refMean = Matrix::Identity(dim, dim);
+	this->T_refIn_refMean.block(0,dim-1, dim-1, 1) = meanMap.head(dim-1);
 	
 	// Reajust reference position (only translations): 
 	// from here reference is express in frame <refMean>
@@ -510,7 +530,7 @@ template<typename T>
 void PointMatcher<T>::ICPSequence::clearMap()
 {
 	const int dim(mapPointCloud.features.rows());
-	T_refIn_refMean = Matrix::Identity(dim, dim);
+	this->T_refIn_refMean = Matrix::Identity(dim, dim);
 	mapPointCloud = DataPoints();
 }
 
@@ -544,7 +564,7 @@ const typename PointMatcher<T>::DataPoints PointMatcher<T>::ICPSequence::getPref
 	if(this->hasMap())
 	{
 		const int dim(mapPointCloud.features.rows());
-		const Vector meanMapNonHomo(T_refIn_refMean.block(0,dim-1, dim-1, 1));
+		const Vector meanMapNonHomo(this->T_refIn_refMean.block(0,dim-1, dim-1, 1));
 		globalMap.features.topRows(dim-1).colwise() += meanMapNonHomo;
 	}
 
@@ -603,7 +623,7 @@ typename PointMatcher<T>::TransformationParameters PointMatcher<T>::ICPSequence:
 	
 	this->inspector->init();
 	
-	return this->computeWithTransformedReference(cloudIn, mapPointCloud, T_refIn_refMean, T_refIn_dataIn);
+	return this->computeWithTransformedReference(cloudIn, mapPointCloud, this->T_refIn_refMean, T_refIn_dataIn);
 }
 
 template struct PointMatcher<float>::ICPSequence;

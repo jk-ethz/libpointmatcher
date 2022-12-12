@@ -235,6 +235,7 @@ __Impact on the number of points:__ reduces number of points
 |Parameter  |Description  |Default value    |Allowable range|
 |---------  |:---------|:----------------|:--------------|
 |prob        | Probability that a point is kept (1/decimation factor) | 0.75 | min: 0, max: 1 |
+|randomSamplingMethod | Random sampling method: Direct RNG (0) (fastest), Uniform (1) (more accurate but slower) | 0 | min: 0, max: 1 |
 
 ### Example
 In the following sample, points are kept with a probability of 0.1.  Therefore the total number of points in the output point cloud is approximately 10 times less than the number of points in the input point cloud and the density is decreased overall.
@@ -340,6 +341,7 @@ __Impact on the number of points:__ reduces number of points
 |maxPointByNode	| number of point under which the octree stop dividing | 1 | min: 1, max: 4294967295 |
 |maxSizeByNode	| size of the bounding box under which the octree stop dividing | 0.0 | min: 0.0, max: +inf |
 |samplingMethod	| method to sample the octree: First Point (0), Random (1), Centroid (2) (more accurate but costly), Medoid (3) (more accurate but costly) | 0 | min: 0, max: 3 |
+|centerAtOrigin	|| flag for determining whether the octree grid should be centered at the origin (true) or the center should be computed based on the input data. | true (1) | 0 or 1 |
 
 ### Example
 The following example uses a structured point cloud from the apartment dataset. As the pointcloud is structured we use the size criterion set to 20 cm to decompose the point cloud. In each leaf, we took the _centroid_ (bottom) or the _medoid_ (top) colored in green (output points), where the color of the pointcloud represents the indexes in the octree.
@@ -385,6 +387,7 @@ __Impact on the number of points:__ reduces number of points
 |nbSample	| number of point to select | 5000 | min: 1, max: 4294967295|
 |seed	| seed for the random generator | 1 | min: 0, max: 4294967295 |
 |epsilon	| step of discretization for the angle spaces | PI/32 | min: PI/64, max: PI |
+|randomShuffle	| whether points should be randomly shuffled before sampling | 0 | min: 0, max: 1 |
 
 ### Example
 The following example uses a structured point cloud from the apartment dataset. The following gives the normal representation (on a sphere) of the original point cloud (we can clearly see that some areas are more populated) and the normal representation of the uniform sampled pointcloud (output).

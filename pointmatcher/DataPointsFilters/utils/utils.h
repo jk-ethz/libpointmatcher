@@ -102,11 +102,19 @@ serializeEigVec(const typename PointMatcher<T>::Matrix& eigenVe)
 	return output;
 }
 
-template<typename T>
-T computeDensity(const typename PointMatcher<T>::Matrix& NN)
+template<typename T, typename Derived>
+T computeDensity(const Eigen::MatrixBase<Derived>& NN)
 {
-	//volume in meter
-	const T volume = (4./3.)*M_PI*std::pow(NN.colwise().norm().maxCoeff(), 3);
+	constexpr T threeQuarters{4./3.};
+	constexpr T pi{M_PI};
+
+	// Volume in meter
+	// V = 4/3 * pi * maxColWise(NN)^3
+	// 	 Note that we implement cubic power use a direct product instead of std::pow to maximize performance.
+	//   Reference https://baptiste-wicht.com/posts/2017/09/cpp11-performance-tip-when-to-use-std-pow.html
+	const T maxOfNNSquaredNorm{NN.colwise().squaredNorm().maxCoeff()};
+	const T volume{threeQuarters * pi * (maxOfNNSquaredNorm * std::sqrt(maxOfNNSquaredNorm))};
+	const T nbPoints{static_cast<T>(NN.cols())};
 
 	//volume in decimeter
 	//T volume = (4./3.)*M_PI*std::pow(NN.colwise().norm().maxCoeff()*10.0, 3);
@@ -116,8 +124,10 @@ T computeDensity(const typename PointMatcher<T>::Matrix& NN)
 	//if(volume < minVolume)
 	//	volume = minVolume;
 
-	return T(NN.cols())/(volume);
+	return (volume > 0) ? (nbPoints / volume) : 0;
 }
+
+// TODO(ynava) Replace this method in Ellipsoids, Gestalt and SamplingSurfaceNormal filters with the new versions from Pointmatcher::SurfaceNormalEstimatorPCA.
 template<typename T>
 typename PointMatcher<T>::Vector
 computeNormal(const typename PointMatcher<T>::Vector& eigenVa, const typename PointMatcher<T>::Matrix& eigenVe)
@@ -156,4 +166,4 @@ size_t argMax(const typename PointMatcher<T>::Vector& v)
 	return maxIdx;
 }
 
-};
+}
