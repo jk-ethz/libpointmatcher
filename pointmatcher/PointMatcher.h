@@ -100,6 +100,7 @@ namespace PointMatcherSupport
 		ConfigurationError(const std::string& reason);
 	};
 
+	
 	//! The logger interface, used to output warnings and informations
 	struct Logger: public Parametrizable
 	{
@@ -713,10 +714,9 @@ struct PointMatcher
 		virtual ~ICPChainBase();
 
 		virtual void setDefault();
-
+		
 		virtual void loadFromYaml(std::istream& in);
-
-    	unsigned getPrefilteredReadingPtsCount() const;
+		unsigned getPrefilteredReadingPtsCount() const;
 		unsigned getPrefilteredReferencePtsCount() const;
 
 		bool getMaxNumIterationsReached() const;

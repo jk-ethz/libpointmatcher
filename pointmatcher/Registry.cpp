@@ -62,7 +62,7 @@ PointMatcher<T>::PointMatcher()
 {
 	ADD_TO_REGISTRAR_NO_PARAM(Transformation, RigidTransformation, typename TransformationsImpl<T>::RigidTransformation)
 	ADD_TO_REGISTRAR_NO_PARAM(Transformation, PureTranslation, typename TransformationsImpl<T>::PureTranslation)
-	ADD_TO_REGISTRAR_NO_PARAM(Transformation, SimilarityTransformation, typename TransformationsImpl<T>::SimilarityTransformation)
+	ADD_TO_REGISTRAR_NO_PARAM(Transformation, SimilarityTransformation, typename TransformationsImpl<T>::SimilarityTransformation)	
 	
 	ADD_TO_REGISTRAR_NO_PARAM(DataPointsFilter, IdentityDataPointsFilter, typename DataPointsFiltersImpl<T>::IdentityDataPointsFilter)
 	ADD_TO_REGISTRAR_NO_PARAM(DataPointsFilter, RemoveNaNDataPointsFilter, typename DataPointsFiltersImpl<T>::RemoveNaNDataPointsFilter)
@@ -91,6 +91,9 @@ PointMatcher<T>::PointMatcher()
 	ADD_TO_REGISTRAR(DataPointsFilter, CovarianceSamplingDataPointsFilter, typename DataPointsFiltersImpl<T>::CovarianceSamplingDataPointsFilter)
 	ADD_TO_REGISTRAR(DataPointsFilter, DistanceLimitDataPointsFilter, typename DataPointsFiltersImpl<T>::DistanceLimitDataPointsFilter)
 	ADD_TO_REGISTRAR(DataPointsFilter, RemoveSensorBiasDataPointsFilter, typename DataPointsFiltersImpl<T>::RemoveSensorBiasDataPointsFilter)
+    ADD_TO_REGISTRAR(DataPointsFilter, SphericalityDataPointsFilter, typename DataPointsFiltersImpl<T>::SphericalityDataPointsFilter)
+	ADD_TO_REGISTRAR(DataPointsFilter, SaliencyDataPointsFilter, typename DataPointsFiltersImpl<T>::SaliencyDataPointsFilter)
+	ADD_TO_REGISTRAR(DataPointsFilter, SpectralDecompositionDataPointsFilter, typename DataPointsFiltersImpl<T>::SpectralDecompositionDataPointsFilter)
 	ADD_TO_REGISTRAR(DataPointsFilter, OrganizedCloudSurfaceNormalDataPointsFilter, typename DataPointsFiltersImpl<T>::OrganizedCloudSurfaceNormalDataPointsFilter)
 	
 	ADD_TO_REGISTRAR_NO_PARAM(Matcher, NullMatcher, typename MatchersImpl<T>::NullMatcher)

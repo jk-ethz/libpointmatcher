@@ -65,6 +65,9 @@ set(POINTMATCHER_SRC
 	pointmatcher/DataPointsFilters/CovarianceSampling.cpp
 	pointmatcher/DataPointsFilters/DistanceLimit.cpp
 	pointmatcher/DataPointsFilters/RemoveSensorBias.cpp
+	pointmatcher/DataPointsFilters/Sphericality.cpp
+	pointmatcher/DataPointsFilters/Saliency.cpp	
+	pointmatcher/DataPointsFilters/SpectralDecomposition.cpp	
 	pointmatcher/DataPointsFilters/OrganizedCloudSurfaceNormal.cpp
 )
 

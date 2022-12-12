@@ -63,6 +63,9 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "DataPointsFilters/CovarianceSampling.h"
 #include "DataPointsFilters/DistanceLimit.h"
 #include "DataPointsFilters/RemoveSensorBias.h"
+#include "DataPointsFilters/Sphericality.h"
+#include "DataPointsFilters/Saliency.h"
+#include "DataPointsFilters/SpectralDecomposition.h"
 #include "DataPointsFilters/OrganizedCloudSurfaceNormal.h"
 
 template<typename T>
@@ -94,6 +97,9 @@ struct DataPointsFiltersImpl
 	typedef ::CovarianceSamplingDataPointsFilter<T> CovarianceSamplingDataPointsFilter;
 	typedef ::DistanceLimitDataPointsFilter<T> DistanceLimitDataPointsFilter;
 	typedef ::RemoveSensorBiasDataPointsFilter<T> RemoveSensorBiasDataPointsFilter;
+    typedef ::SphericalityDataPointsFilter<T> SphericalityDataPointsFilter;
+	typedef ::SaliencyDataPointsFilter<T> SaliencyDataPointsFilter;
+	typedef ::SpectralDecompositionDataPointsFilter<T> SpectralDecompositionDataPointsFilter;
 	typedef ::OrganizedCloudSurfaceNormalDataPointsFilter<T> OrganizedCloudSurfaceNormalDataPointsFilter;
     typedef ::HiddenPointRemovalDataPointsFilter<T> HiddenPointRemovalDataPointsFilter;
 

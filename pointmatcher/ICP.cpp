@@ -438,7 +438,7 @@ typename PointMatcher<T>::TransformationParameters PointMatcher<T>::ICP::compute
 		{
 			this->transformationCheckers.check(T_iter, iterate);
 		}
-		catch(const typename TransformationCheckersImpl<T>::CounterTransformationChecker::MaxNumIterationsReached & e)
+		catch(const typename TransformationCheckersImpl<T>::CounterTransformationChecker::MaxNumIterationsReached &)
 		{
 			iterate = false;
 			this->maxNumIterationsReached = true;

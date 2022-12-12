@@ -44,7 +44,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <boost/format.hpp>
 
-#include "utils/utils.h"
+#include "DataPointsFilters/utils/utils.h"
 
 // SurfaceNormalDataPointsFilter
 // Constructor
@@ -239,7 +239,7 @@ void SurfaceNormalDataPointsFilter<T>::inPlaceFilter(
 			if(sortEigen)
 				normals->col(i) = SurfaceNormalEstimatorPCA::extrudeNormalFromIncreasinglyOrderedEigenvectors(eigenVa, eigenVe);
 			else
-				normals->col(i) = SurfaceNormalEstimatorPCA::extrudeNormalFromUnorderedEigenvectors(eigenVa, eigenVe);
+				normals->col(i) = computeNormal<T>(eigenVa, eigenVe);
 			
 			// clamp normals to [-1,1] to handle approximation errors
 			normals->col(i) = normals->col(i).cwiseMax(-1.0).cwiseMin(1.0);
@@ -266,29 +266,6 @@ void SurfaceNormalDataPointsFilter<T>::inPlaceFilter(
 			}
 		}
 
-		if(keepSurfaceDescriptors)
-		{
-			if(isDegenerate)
-			{
-				(*linearity)(0, i) = std::numeric_limits<std::size_t>::min();
-				(*planarity)(0, i) = std::numeric_limits<std::size_t>::min();
-				(*curvature)(0, i) = std::numeric_limits<std::size_t>::min();
-			}
-			else
-			{
-				if(sortEigen)
-				{
-					SurfaceNormalEstimatorPCA::computeLocalSurfaceDescriptors(eigenVa, (*linearity)(0, i), (*planarity)(0, i), (*curvature)(0, i));
-				}
-				else
-				{
-					Vector eigenVaSort{eigenVa};
-					std::sort(eigenVaSort.data(), eigenVaSort.data() + eigenVaSort.size());
-					SurfaceNormalEstimatorPCA::computeLocalSurfaceDescriptors(eigenVaSort, (*linearity)(0, i), (*planarity)(0, i), (*curvature)(0, i));
-				}
-				
-			}
-		}
 	}
 
 	if(keepMatchedIds)

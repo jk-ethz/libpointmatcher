@@ -49,7 +49,6 @@ NormalSpaceDataPointsFilter<T>::NormalSpaceDataPointsFilter(const Parameters& pa
 	nbSample{Parametrizable::get<std::size_t>("nbSample")},
 	seed{Parametrizable::get<std::size_t>("seed")},
 	epsilon{Parametrizable::get<T>("epsilon")},
-	randomShuffle{Parametrizable::get<bool>("randomShuffle")},
 	nbBucket{std::size_t(ceil(2.0 * M_PI / epsilon) * ceil(M_PI / epsilon))}
 {
 }
@@ -90,48 +89,34 @@ void NormalSpaceDataPointsFilter<T>::inPlaceFilter(DataPoints& cloud)
 	std::mt19937 gen(seed); //Standard mersenne_twister_engine seeded with seed
 
 	//bucketed normal space
-	std::vector<std::vector<int>> idBuckets;
+	std::vector<std::vector<int> > idBuckets;
 	idBuckets.resize(nbBucket);
 
 	std::vector<std::size_t> keepIndexes;
 	keepIndexes.reserve(nbSample);
 
-	// Generate a random sequence of indices so that elements are placed in buckets
-	std::vector<std::size_t> pointIndices(nbPoints);
-	std::iota(pointIndices.begin(), pointIndices.end(), 0); // 0-nbPoints
-	
-	// Points are shuffled randomly to ensure a uniform distribution of normals in the sampling set.
-	if(randomShuffle)
-	{
-		std::random_shuffle(pointIndices.begin(), pointIndices.end());
-	}
-
-	// We compute the spherical coordinate of the point cloud points based on their normal vectors.
-	// Reference: http://corysimon.github.io/articles/uniformdistn-on-sphere/
-	// Note that the coordinate conversion has been optimized for small point clouds (<100k points) by performing it
-	// in batch instead of selectively (to make it easy for the compiler to vectorize this operation)
-    const T twoPi{ 2. * M_PI };
-    const Eigen::Array<T, 1, Eigen::Dynamic> polarAngleOfNormals{ normals.row(2).array().acos() };
-    const Eigen::Array<T, 1, Eigen::Dynamic> azimuthAngleOfNormals{ normals.row(1).array().binaryExpr(
-        normals.row(0).array(), [&](float y, float x) { return std::fmod(std::atan2(y, x) + twoPi, twoPi); }) };
+	// Generate a random sequence of indices so that elements are placed in buckets in random order
+	std::vector<std::size_t> randIdcs(nbPoints);
+	std::iota(randIdcs.begin(), randIdcs.end(), 0);
+	std::random_shuffle(randIdcs.begin(), randIdcs.end());
 
 	///(1) put all points of the data into buckets based on their normal direction
-	for (auto pointIndex : pointIndices)
+	for (auto randIdx : randIdcs)
 	{
 		// Allow for slight approximiation errors
-		assert(normals.col(pointIndex).head(3).norm() >= 1.0-0.00001);
-		assert(normals.col(pointIndex).head(3).norm() <= 1.0+0.00001);
+		assert(normals.col(randIdx).head(3).norm() >= 1.0-0.00001);
+		assert(normals.col(randIdx).head(3).norm() <= 1.0+0.00001);
 		// Catch errors where theta will be NaN
-		assert((normals(2,pointIndex) <= 1.0) && (normals(2, pointIndex) >= -1.0));
+		assert((normals(2,randIdx) <= 1.0) && (normals(2,randIdx) >= -1.0));
 
 		//Theta = polar angle in [0 ; pi]
-		const T theta{polarAngleOfNormals(pointIndex)};
+		const T theta = std::acos(normals(2, randIdx));
 		//Phi = azimuthal angle in [0 ; 2pi]
-		const T phi{azimuthAngleOfNormals(pointIndex)};
+		const T phi = std::fmod(std::atan2(normals(1, randIdx), normals(0, randIdx)) + 2. * M_PI, 2. * M_PI);
 
 		// Catch normal space hashing errors
 		assert(bucketIdx(theta, phi) < nbBucket);
-		idBuckets[bucketIdx(theta, phi)].emplace_back(pointIndex);
+		idBuckets[bucketIdx(theta, phi)].push_back(randIdx);
 	}
 
 	// Remove empty buckets
@@ -143,18 +128,18 @@ void NormalSpaceDataPointsFilter<T>::inPlaceFilter(DataPoints& cloud)
 	for (std::size_t i=0; i<nbSample; i++)
 	{
 		// Get a random bucket
-		std::uniform_int_distribution<std::size_t> uniBucket(0, idBuckets.size()-1);
-		const std::size_t curBucketIdx{uniBucket(gen)};
-		std::vector<int>& curBucket{idBuckets[curBucketIdx]};
+		std::uniform_int_distribution<std::size_t> uniBucket(0,idBuckets.size()-1);
+		std::size_t curBucketIdx = uniBucket(gen);
+		std::vector<int>& curBucket = idBuckets[curBucketIdx];
 
 		///(3) A point is randomly picked in a bucket that contains multiple points
-		const int idToKeep{curBucket[curBucket.size()-1]};
+		int idToKeep = curBucket[curBucket.size()-1];
 		curBucket.pop_back();
-		keepIndexes.emplace_back(static_cast<std::size_t>(idToKeep));
+		keepIndexes.push_back(static_cast<std::size_t>(idToKeep));
 
 		// Remove the bucket if it is empty
 		if (curBucket.empty()) {
-			idBuckets.erase(idBuckets.begin() + curBucketIdx);
+			idBuckets.erase(idBuckets.begin()+curBucketIdx);
 		}
 	}
 
