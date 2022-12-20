@@ -5,7 +5,9 @@ add_compile_options(-Wall -Wextra -Wpedantic)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 if (NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
   add_definitions(-O3)
-endif(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+else()
+  add_definitions(-O1)
+endif()
 
 # Set catkin package dependencies
 set(CATKIN_PACKAGE_DEPENDENCIES
